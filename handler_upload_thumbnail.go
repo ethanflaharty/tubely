@@ -1,10 +1,12 @@
 package main
 
 import (
-	"encoding/base64"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/google/uuid"
@@ -47,32 +49,49 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	mediaType := header.Header.Get("Content-Type")
+	rawContentType := header.Header.Get("Content-Type")
 
-	data, err := io.ReadAll(file)
+	mediaType, _, err := mime.ParseMediaType(rawContentType)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Error reading thumbnail file", err)
+		respondWithError(w, http.StatusInternalServerError, "Error parsing media type", err)
+		return
+	}
+
+	extensions, err := mime.ExtensionsByType(mediaType)
+	if err != nil {
+		if len(extensions) == 0 {
+			respondWithError(w, http.StatusBadRequest, "Extensions not found", err)
+			return
+		}
+		respondWithError(w, http.StatusInternalServerError, "Error getting extensions", err)
 		return
 	}
 
 	video, err := cfg.db.GetVideo(videoID)
 	if err != nil {
-		if video.UserID != userID {
-			respondWithError(w, http.StatusUnauthorized, "User is not the video owner", err)
-			return
-		}
 		respondWithError(w, http.StatusInternalServerError, "Error getting video", err)
 		return
 	}
-
-	thumbnail := thumbnail{
-		data:      data,
-		mediaType: mediaType,
+	if video.UserID != userID {
+		respondWithError(w, http.StatusUnauthorized, "User is not the video owner", err)
+		return
 	}
 
-	imageString := base64.StdEncoding.EncodeToString(thumbnail.data)
+	fileName := videoID.String() + extensions[0]
+	fullPath := filepath.Join(cfg.assetsRoot, fileName)
+	newFile, err := os.Create(fullPath)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Error creating new file", err)
+		return
+	}
 
-	dataURL := fmt.Sprintf("data:%v;base64,%v", thumbnail.mediaType, imageString)
+	_, err = io.Copy(newFile, file)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Error copying file contents", err)
+		return
+	}
+
+	dataURL := fmt.Sprintf("http://localhost:%v/assets/%v", cfg.port, fileName)
 
 	video.ThumbnailURL = &dataURL
 
