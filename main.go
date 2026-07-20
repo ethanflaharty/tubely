@@ -82,7 +82,7 @@ func main() {
 
 	awsConfig, err := config.LoadDefaultConfig(context.Background(), config.WithRegion(s3Region))
 	if err != nil {
-		log.Fatal("Error getting awsConfig")
+		log.Fatal(err)
 	}
 
 	s3Client := s3.NewFromConfig(awsConfig)
