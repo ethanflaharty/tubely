@@ -51,6 +51,8 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	defer file.Close()
+
 	rawContentType := header.Header.Get("Content-Type")
 
 	mediaType, _, err := mime.ParseMediaType(rawContentType)
@@ -59,7 +61,7 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if mediaType != "image/jpeg" && mediaType != "image/png" {
-		respondWithError(w, http.StatusBadRequest, "Incompatible media type", err)
+		respondWithError(w, http.StatusBadRequest, "Incompatible file type", err)
 		return
 	}
 
@@ -84,7 +86,10 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	}
 
 	random := make([]byte, 32)
-	rand.Read(random)
+	_, err = rand.Read(random)
+	if err != nil {
+		panic("failed to generate random bytes")
+	}
 	randomString := base64.RawURLEncoding.EncodeToString(random)
 
 	fileName := randomString + extensions[0]
